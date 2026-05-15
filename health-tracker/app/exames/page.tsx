@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getExames, upsertExame, deleteExame } from "@/lib/db";
 import { ExameSangue, ResultadoExame } from "@/lib/types";
 import { fmtDate, today } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
@@ -39,45 +39,39 @@ export default function ExamesPage() {
   const [form, setForm] = useState({ data: today(), laboratorio: "", notas: "" });
   const [resultados, setResultados] = useState<ResultadoExame[]>([{ ...emptyResult }]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setExames([...d.examesSangue].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: ExameSangue[]) {
-    const d = loadData();
-    d.examesSangue = updated;
-    saveData(d);
-    setExames([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setExames(await getExames());
+    setLoading(false);
   }
+
+  useEffect(() => { load(); }, []);
 
   function addMarcador(m: typeof MARCADORES_COMUNS[0]) {
     if (resultados.some((r) => r.nome === m.nome)) return;
     setResultados((prev) => [...prev, { nome: m.nome, valor: "", unidade: m.unidade, referencia: m.referencia, status: "normal" }]);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     const valid = resultados.filter((r) => r.nome && r.valor);
-    const d = loadData();
-    const entry: ExameSangue = { ...form, id: editId ?? uid(), resultados: valid };
-    if (editId) {
-      d.examesSangue = d.examesSangue.map((x) => (x.id === editId ? entry : x));
-    } else {
-      d.examesSangue.push(entry);
-    }
-    persist(d.examesSangue);
+    const entry = { ...form, resultados: valid };
+    await upsertExame(editId ? { ...entry, id: editId } : entry);
+    await load();
     setOpen(false);
     setEditId(null);
     setForm({ data: today(), laboratorio: "", notas: "" });
     setResultados([{ ...emptyResult }]);
+    setSaving(false);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.examesSangue = d.examesSangue.filter((x) => x.id !== id);
-    persist(d.examesSangue);
+  async function handleDelete(id: string) {
+    await deleteExame(id);
+    setExames((prev) => prev.filter((x) => x.id !== id));
   }
 
   const statusColor = (s?: string) =>
@@ -97,7 +91,6 @@ export default function ExamesPage() {
         }
       />
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 my-4">
@@ -113,8 +106,6 @@ export default function ExamesPage() {
                   <input type="text" className="input" placeholder="Nome do laboratório" value={form.laboratorio} onChange={(e) => setForm({ ...form, laboratorio: e.target.value })} />
                 </div>
               </div>
-
-              {/* Marcadores comuns */}
               <div>
                 <p className="label mb-2">Adicionar marcadores comuns:</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -126,8 +117,6 @@ export default function ExamesPage() {
                   ))}
                 </div>
               </div>
-
-              {/* Resultados */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="label">Resultados</p>
@@ -157,21 +146,24 @@ export default function ExamesPage() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <label className="label">Notas</label>
-                <textarea className="input h-14 resize-none" placeholder="Observações médicas, próximo exame..." value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+                <textarea className="input h-14 resize-none" placeholder="Observações médicas..." value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium">Salvar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {exames.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : exames.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">🧪</p>
           <p>Nenhum exame registrado ainda.</p>
@@ -196,7 +188,6 @@ export default function ExamesPage() {
                   <button onClick={() => handleDelete(ex.id)} className="text-xs text-red-400 hover:text-red-600">Excluir</button>
                 </div>
               </div>
-
               {expanded === ex.id && (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-sm">

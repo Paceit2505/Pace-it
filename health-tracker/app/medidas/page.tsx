@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getMedidas, upsertMedida, deleteMedida } from "@/lib/db";
 import { Medidas } from "@/lib/types";
-import { fmtDate, today, calcIMC, imcCategoria } from "@/lib/utils";
+import { fmtDate, today, calcIMC, imcCategoria, fmtDateShort } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { fmtDateShort } from "@/lib/utils";
 
 const blank = {
   data: today(), peso: "", altura: "", cintura: "", quadril: "",
@@ -21,30 +20,25 @@ export default function MedidasPage() {
   const [form, setForm] = useState({ ...blank });
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setRegistros([...d.medidas].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: Medidas[]) {
-    const d = loadData();
-    d.medidas = updated;
-    saveData(d);
-    setRegistros([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setRegistros(await getMedidas());
+    setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     const peso = +form.peso;
     const altura = +form.altura;
-    const imc = peso && altura ? calcIMC(peso, altura) : undefined;
-    const entry: Medidas = {
-      id: editId ?? uid(),
-      data: form.data,
-      peso,
-      altura,
-      imc,
+    const entry: Omit<Medidas, "id"> = {
+      data: form.data, peso, altura,
+      imc: peso && altura ? calcIMC(peso, altura) : undefined,
       cintura: form.cintura ? +form.cintura : undefined,
       quadril: form.quadril ? +form.quadril : undefined,
       braco: form.braco ? +form.braco : undefined,
@@ -53,16 +47,12 @@ export default function MedidasPage() {
       peito: form.peito ? +form.peito : undefined,
       notas: form.notas || undefined,
     };
-    const d = loadData();
-    if (editId) {
-      d.medidas = d.medidas.map((m) => (m.id === editId ? entry : m));
-    } else {
-      d.medidas.push(entry);
-    }
-    persist(d.medidas);
+    await upsertMedida(editId ? { ...entry, id: editId } : entry);
+    await load();
     setForm({ ...blank });
     setOpen(false);
     setEditId(null);
+    setSaving(false);
   }
 
   function handleEdit(m: Medidas) {
@@ -77,23 +67,17 @@ export default function MedidasPage() {
     setOpen(true);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.medidas = d.medidas.filter((m) => m.id !== id);
-    persist(d.medidas);
+  async function handleDelete(id: string) {
+    await deleteMedida(id);
+    setRegistros((prev) => prev.filter((m) => m.id !== id));
   }
 
   const chartData = [...registros].reverse().slice(-12).map((m) => ({
-    data: fmtDateShort(m.data),
-    peso: m.peso,
-    imc: m.imc,
-    cintura: m.cintura,
+    data: fmtDateShort(m.data), peso: m.peso, imc: m.imc, cintura: m.cintura,
   }));
 
   const ultimo = registros[0];
   const imcInfo = ultimo?.imc ? imcCategoria(ultimo.imc) : null;
-
-  // Relação cintura/quadril
   const rcq = ultimo?.cintura && ultimo?.quadril
     ? (ultimo.cintura / ultimo.quadril).toFixed(2)
     : null;
@@ -168,7 +152,6 @@ export default function MedidasPage() {
         </div>
       )}
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
@@ -191,12 +174,9 @@ export default function MedidasPage() {
               <p className="text-xs text-gray-500 font-medium">Circunferências (cm) — opcionais</p>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { key: "cintura", label: "Cintura" },
-                  { key: "quadril", label: "Quadril" },
-                  { key: "peito", label: "Peito" },
-                  { key: "braco", label: "Braço" },
-                  { key: "coxa", label: "Coxa" },
-                  { key: "panturrilha", label: "Panturrilha" },
+                  { key: "cintura", label: "Cintura" }, { key: "quadril", label: "Quadril" },
+                  { key: "peito", label: "Peito" }, { key: "braco", label: "Braço" },
+                  { key: "coxa", label: "Coxa" }, { key: "panturrilha", label: "Panturrilha" },
                 ].map(({ key, label }) => (
                   <div key={key}>
                     <label className="label">{label}</label>
@@ -208,24 +188,28 @@ export default function MedidasPage() {
               {form.peso && form.altura && (
                 <div className="bg-teal-50 rounded-lg p-3 text-center">
                   <span className="text-sm text-teal-700 font-medium">
-                    IMC calculado: {calcIMC(+form.peso, +form.altura)} — {imcCategoria(calcIMC(+form.peso, +form.altura)).label}
+                    IMC: {calcIMC(+form.peso, +form.altura)} — {imcCategoria(calcIMC(+form.peso, +form.altura)).label}
                   </span>
                 </div>
               )}
               <div>
                 <label className="label">Notas</label>
-                <textarea className="input h-14 resize-none" placeholder="Observações..." value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+                <textarea className="input h-14 resize-none" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Salvar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {registros.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : registros.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">📐</p>
           <p>Nenhuma medição registrada ainda.</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getTreinos, upsertTreino, deleteTreino } from "@/lib/db";
 import { Treino, TreinoTipo } from "@/lib/types";
 import { fmtDate, today, treinoTipoLabel } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
@@ -13,13 +13,8 @@ const TIPOS: TreinoTipo[] = [
 ];
 
 const blank: Omit<Treino, "id"> = {
-  data: today(),
-  tipo: "musculacao",
-  duracaoMin: 60,
-  intensidade: 7,
-  exercicios: "",
-  calorias: undefined,
-  notas: "",
+  data: today(), tipo: "musculacao", duracaoMin: 60, intensidade: 7,
+  exercicios: "", calorias: undefined, notas: "",
 };
 
 export default function TreinosPage() {
@@ -27,31 +22,26 @@ export default function TreinosPage() {
   const [form, setForm] = useState({ ...blank });
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setTreinos([...d.treinos].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: Treino[]) {
-    const d = loadData();
-    d.treinos = updated;
-    saveData(d);
-    setTreinos([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setTreinos(await getTreinos());
+    setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const d = loadData();
-    if (editId) {
-      d.treinos = d.treinos.map((t) => (t.id === editId ? { ...form, id: editId } : t));
-    } else {
-      d.treinos.push({ ...form, id: uid() });
-    }
-    persist(d.treinos);
+    setSaving(true);
+    await upsertTreino(editId ? { ...form, id: editId } : form);
+    await load();
     setForm({ ...blank });
     setOpen(false);
     setEditId(null);
+    setSaving(false);
   }
 
   function handleEdit(t: Treino) {
@@ -60,10 +50,9 @@ export default function TreinosPage() {
     setOpen(true);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.treinos = d.treinos.filter((t) => t.id !== id);
-    persist(d.treinos);
+  async function handleDelete(id: string) {
+    await deleteTreino(id);
+    setTreinos((prev) => prev.filter((t) => t.id !== id));
   }
 
   const stars = (n: number) => "★".repeat(n) + "☆".repeat(10 - n);
@@ -75,16 +64,13 @@ export default function TreinosPage() {
         title="Treinos"
         description="Registre suas sessões de treino"
         action={
-          <button
-            onClick={() => { setOpen(true); setEditId(null); setForm({ ...blank }); }}
-            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
+          <button onClick={() => { setOpen(true); setEditId(null); setForm({ ...blank }); }}
+            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
             + Novo Treino
           </button>
         }
       />
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
@@ -125,20 +111,22 @@ export default function TreinosPage() {
                 <textarea className="input h-16 resize-none" placeholder="Como foi o treino?" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">Salvar</button>
+                <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Lista */}
-      {treinos.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : treinos.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">🏋️</p>
           <p className="text-base">Nenhum treino registrado ainda.</p>
-          <p className="text-sm">Clique em "+ Novo Treino" para começar.</p>
         </div>
       ) : (
         <div className="space-y-3">

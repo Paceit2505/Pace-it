@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData } from "@/lib/storage";
-import { HealthData } from "@/lib/types";
-import { fmtDate, imcCategoria, treinoTipoLabel } from "@/lib/utils";
+import {
+  getTreinos,
+  getSono,
+  getMedidas,
+  getBioimpedancias,
+} from "@/lib/db";
+import { Treino, Sono, Medidas, Bioimpedancia } from "@/lib/types";
+import { fmtDate, fmtDateShort, imcCategoria, treinoTipoLabel } from "@/lib/utils";
 import StatCard from "@/components/StatCard";
 import Card from "@/components/Card";
 import {
@@ -17,37 +22,54 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { fmtDateShort } from "@/lib/utils";
 
 export default function Dashboard() {
-  const [data, setData] = useState<HealthData | null>(null);
+  const [treinos, setTreinos] = useState<Treino[]>([]);
+  const [sono, setSono] = useState<Sono[]>([]);
+  const [medidas, setMedidas] = useState<Medidas[]>([]);
+  const [bios, setBios] = useState<Bioimpedancia[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setData(loadData());
+    Promise.all([getTreinos(), getSono(), getMedidas(), getBioimpedancias()])
+      .then(([t, s, m, b]) => {
+        setTreinos(t);
+        setSono(s);
+        setMedidas(m);
+        setBios(b);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  if (!data) return null;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        <p>Carregando...</p>
+      </div>
+    );
+  }
 
-  const ultimaMedida = [...data.medidas].sort((a, b) => b.data.localeCompare(a.data))[0];
-  const ultimoBio = [...data.bioimpedancias].sort((a, b) => b.data.localeCompare(a.data))[0];
-  const ultimoSono = [...data.sono].sort((a, b) => b.data.localeCompare(a.data))[0];
-  const treinosMes = data.treinos.filter((t) => {
-    const d = new Date(t.data);
+  const ultimaMedida = medidas[0];
+  const ultimoBio = bios[0];
+  const ultimoSono = sono[0];
+
+  const treinosMes = treinos.filter((t) => {
+    const d = new Date(t.data + "T00:00:00");
     const now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
 
-  const pesoData = [...data.medidas]
+  const pesoData = [...medidas]
     .sort((a, b) => a.data.localeCompare(b.data))
     .slice(-12)
     .map((m) => ({ data: fmtDateShort(m.data), peso: m.peso }));
 
-  const sonoData = [...data.sono]
+  const sonoData = [...sono]
     .sort((a, b) => a.data.localeCompare(b.data))
     .slice(-14)
     .map((s) => ({ data: fmtDateShort(s.data), horas: s.duracaoHoras }));
 
-  const treinosPorTipo = data.treinos.reduce<Record<string, number>>((acc, t) => {
+  const treinosPorTipo = treinos.reduce<Record<string, number>>((acc, t) => {
     acc[t.tipo] = (acc[t.tipo] ?? 0) + 1;
     return acc;
   }, {});
@@ -56,15 +78,18 @@ export default function Dashboard() {
     qtd,
   }));
 
-  const gorduraData = [...data.bioimpedancias]
+  const gorduraData = [...bios]
     .sort((a, b) => a.data.localeCompare(b.data))
     .slice(-8)
-    .map((b) => ({ data: fmtDateShort(b.data), gordura: b.gorduraCorporal, muscular: b.massaMuscular }));
+    .map((b) => ({
+      data: fmtDateShort(b.data),
+      gordura: b.gorduraCorporal,
+      muscular: b.massaMuscular,
+    }));
 
-  const imc = ultimaMedida?.imc ?? (ultimaMedida ? undefined : undefined);
+  const imc = ultimaMedida?.imc;
   const imcInfo = imc ? imcCategoria(imc) : null;
-
-  const empty = !data.treinos.length && !data.sono.length && !data.medidas.length;
+  const empty = !treinos.length && !sono.length && !medidas.length;
 
   return (
     <div>
@@ -83,7 +108,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon="⚖️"
@@ -96,7 +120,7 @@ export default function Dashboard() {
           icon="💪"
           label="Treinos no Mês"
           value={treinosMes.length}
-          sub={`${data.treinos.length} no total`}
+          sub={`${treinos.length} no total`}
           color="text-blue-600"
         />
         <StatCard
@@ -117,9 +141,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* IMC + charts */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
-        {/* IMC Card */}
         <Card className="flex flex-col gap-3">
           <h2 className="font-semibold text-gray-700">IMC</h2>
           {ultimaMedida && imc ? (
@@ -147,7 +169,6 @@ export default function Dashboard() {
           )}
         </Card>
 
-        {/* Peso */}
         <Card className="col-span-2">
           <h2 className="font-semibold text-gray-700 mb-3">Evolução do Peso (kg)</h2>
           {pesoData.length > 0 ? (
@@ -167,7 +188,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Sono */}
         <Card className="col-span-2">
           <h2 className="font-semibold text-gray-700 mb-3">Horas de Sono (últimas 2 semanas)</h2>
           {sonoData.length > 0 ? (
@@ -185,7 +205,6 @@ export default function Dashboard() {
           )}
         </Card>
 
-        {/* Treinos por tipo */}
         <Card>
           <h2 className="font-semibold text-gray-700 mb-3">Treinos por Tipo</h2>
           {treinosChartData.length > 0 ? (
@@ -202,10 +221,11 @@ export default function Dashboard() {
           )}
         </Card>
 
-        {/* Composição corporal */}
         {gorduraData.length > 0 && (
           <Card className="col-span-3">
-            <h2 className="font-semibold text-gray-700 mb-3">Composição Corporal — Gordura vs Massa Muscular</h2>
+            <h2 className="font-semibold text-gray-700 mb-3">
+              Composição Corporal — Gordura vs Massa Muscular
+            </h2>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={gorduraData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getBioimpedancias, upsertBioimpedancia, deleteBioimpedancia } from "@/lib/db";
 import { Bioimpedancia } from "@/lib/types";
-import { fmtDate, today } from "@/lib/utils";
+import { fmtDate, today, fmtDateShort } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { fmtDateShort } from "@/lib/utils";
 
 const blank = {
   data: today(), peso: "", gorduraCorporal: "", massaMuscular: "", agua: "",
@@ -21,23 +20,21 @@ export default function BioimpedanciaPage() {
   const [form, setForm] = useState({ ...blank });
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setRegistros([...d.bioimpedancias].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: Bioimpedancia[]) {
-    const d = loadData();
-    d.bioimpedancias = updated;
-    saveData(d);
-    setRegistros([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setRegistros(await getBioimpedancias());
+    setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const entry: Bioimpedancia = {
-      id: editId ?? uid(),
+    setSaving(true);
+    const entry = {
       data: form.data,
       peso: +form.peso,
       gorduraCorporal: +form.gorduraCorporal,
@@ -48,16 +45,12 @@ export default function BioimpedanciaPage() {
       idadeMetabolica: form.idadeMetabolica ? +form.idadeMetabolica : undefined,
       notas: form.notas || undefined,
     };
-    const d = loadData();
-    if (editId) {
-      d.bioimpedancias = d.bioimpedancias.map((b) => (b.id === editId ? entry : b));
-    } else {
-      d.bioimpedancias.push(entry);
-    }
-    persist(d.bioimpedancias);
+    await upsertBioimpedancia(editId ? { ...entry, id: editId } : entry);
+    await load();
     setForm({ ...blank });
     setOpen(false);
     setEditId(null);
+    setSaving(false);
   }
 
   function handleEdit(b: Bioimpedancia) {
@@ -73,19 +66,16 @@ export default function BioimpedanciaPage() {
     setOpen(true);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.bioimpedancias = d.bioimpedancias.filter((b) => b.id !== id);
-    persist(d.bioimpedancias);
+  async function handleDelete(id: string) {
+    await deleteBioimpedancia(id);
+    setRegistros((prev) => prev.filter((b) => b.id !== id));
   }
 
-  const sorted = [...registros].reverse();
-  const chartData = sorted.slice(-10).map((b) => ({
+  const chartData = [...registros].reverse().slice(-10).map((b) => ({
     data: fmtDateShort(b.data),
     gordura: b.gorduraCorporal,
     muscular: b.massaMuscular,
     agua: b.agua,
-    peso: b.peso,
   }));
 
   const ultimo = registros[0];
@@ -104,7 +94,6 @@ export default function BioimpedanciaPage() {
         }
       />
 
-      {/* KPIs */}
       {ultimo && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {[
@@ -152,11 +141,10 @@ export default function BioimpedanciaPage() {
         </div>
       )}
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">{editId ? "Editar" : "Novo"} Registro de Bioimpedância</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">{editId ? "Editar" : "Novo"} Registro</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label">Data</label>
@@ -182,18 +170,22 @@ export default function BioimpedanciaPage() {
               </div>
               <div>
                 <label className="label">Notas</label>
-                <textarea className="input h-14 resize-none" placeholder="Observações..." value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+                <textarea className="input h-14 resize-none" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium">Salvar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {registros.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : registros.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">📊</p>
           <p>Nenhum registro de bioimpedância ainda.</p>

@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getNutricao, upsertNutricao, deleteNutricao } from "@/lib/db";
 import { Nutricao } from "@/lib/types";
-import { fmtDate, today } from "@/lib/utils";
+import { fmtDate, today, fmtDateShort } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { fmtDateShort } from "@/lib/utils";
 
 const blank = { data: today(), calorias: "", proteinas: "", carboidratos: "", gorduras: "", aguaML: "", notas: "" };
 
@@ -18,23 +17,21 @@ export default function NutricaoPage() {
   const [form, setForm] = useState({ ...blank });
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setRegistros([...d.nutricao].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: Nutricao[]) {
-    const d = loadData();
-    d.nutricao = updated;
-    saveData(d);
-    setRegistros([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setRegistros(await getNutricao());
+    setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const entry: Nutricao = {
-      id: editId ?? uid(),
+    setSaving(true);
+    const entry = {
       data: form.data,
       aguaML: +form.aguaML,
       calorias: form.calorias ? +form.calorias : undefined,
@@ -43,16 +40,12 @@ export default function NutricaoPage() {
       gorduras: form.gorduras ? +form.gorduras : undefined,
       notas: form.notas || undefined,
     };
-    const d = loadData();
-    if (editId) {
-      d.nutricao = d.nutricao.map((n) => (n.id === editId ? entry : n));
-    } else {
-      d.nutricao.push(entry);
-    }
-    persist(d.nutricao);
+    await upsertNutricao(editId ? { ...entry, id: editId } : entry);
+    await load();
     setForm({ ...blank });
     setOpen(false);
     setEditId(null);
+    setSaving(false);
   }
 
   function handleEdit(n: Nutricao) {
@@ -67,15 +60,14 @@ export default function NutricaoPage() {
     setOpen(true);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.nutricao = d.nutricao.filter((n) => n.id !== id);
-    persist(d.nutricao);
+  async function handleDelete(id: string) {
+    await deleteNutricao(id);
+    setRegistros((prev) => prev.filter((n) => n.id !== id));
   }
 
   const chartData = [...registros].reverse().slice(-14).map((n) => ({
     data: fmtDateShort(n.data),
-    agua: Math.round(n.aguaML / 100) / 10, // litros
+    agua: Math.round(n.aguaML / 100) / 10,
     calorias: n.calorias,
     proteinas: n.proteinas,
   }));
@@ -117,7 +109,6 @@ export default function NutricaoPage() {
               </BarChart>
             </ResponsiveContainer>
           </Card>
-
           {chartData.some((d) => d.calorias) && (
             <Card>
               <h2 className="font-semibold text-gray-700 mb-3">Calorias e Proteínas</h2>
@@ -154,7 +145,6 @@ export default function NutricaoPage() {
         </div>
       )}
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -190,14 +180,18 @@ export default function NutricaoPage() {
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-lime-600 hover:bg-lime-700 text-white rounded-lg font-medium">Salvar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-lime-600 hover:bg-lime-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {registros.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : registros.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">🥤</p>
           <p>Nenhum registro de nutrição ainda.</p>

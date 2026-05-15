@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadData, saveData, uid } from "@/lib/storage";
+import { getSono, upsertSono, deleteSono } from "@/lib/db";
 import { Sono } from "@/lib/types";
-import { fmtDate, today, calcSonoDuracao } from "@/lib/utils";
+import { fmtDate, today, calcSonoDuracao, fmtDateShort } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import Card from "@/components/Card";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from "recharts";
-import { fmtDateShort } from "@/lib/utils";
 
 const blank = { data: today(), horaDormir: "23:00", horaAcordar: "07:00", qualidade: 3, notas: "" };
 
@@ -22,33 +21,28 @@ export default function SonoPage() {
   const [form, setForm] = useState({ ...blank });
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const d = loadData();
-    setRegistros([...d.sono].sort((a, b) => b.data.localeCompare(a.data)));
-  }, []);
-
-  function persist(updated: Sono[]) {
-    const d = loadData();
-    d.sono = updated;
-    saveData(d);
-    setRegistros([...updated].sort((a, b) => b.data.localeCompare(a.data)));
+  async function load() {
+    setLoading(true);
+    setRegistros(await getSono());
+    setLoading(false);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => { load(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     const duracao = calcSonoDuracao(form.horaDormir, form.horaAcordar);
-    const d = loadData();
-    const entry: Sono = { ...form, id: editId ?? uid(), duracaoHoras: duracao };
-    if (editId) {
-      d.sono = d.sono.map((s) => (s.id === editId ? entry : s));
-    } else {
-      d.sono.push(entry);
-    }
-    persist(d.sono);
+    const entry = { ...form, duracaoHoras: duracao };
+    await upsertSono(editId ? { ...entry, id: editId } : entry);
+    await load();
     setForm({ ...blank });
     setOpen(false);
     setEditId(null);
+    setSaving(false);
   }
 
   function handleEdit(s: Sono) {
@@ -57,14 +51,13 @@ export default function SonoPage() {
     setOpen(true);
   }
 
-  function handleDelete(id: string) {
-    const d = loadData();
-    d.sono = d.sono.filter((s) => s.id !== id);
-    persist(d.sono);
+  async function handleDelete(id: string) {
+    await deleteSono(id);
+    setRegistros((prev) => prev.filter((s) => s.id !== id));
   }
 
   const chartData = [...registros].reverse().slice(-14).map((s) => ({
-    data: fmtDateShort(s.data), horas: s.duracaoHoras, qualidade: s.qualidade,
+    data: fmtDateShort(s.data), horas: s.duracaoHoras,
   }));
 
   const media = registros.length
@@ -78,7 +71,8 @@ export default function SonoPage() {
         title="Sono"
         description="Monitore suas horas e qualidade de sono"
         action={
-          <button onClick={() => { setOpen(true); setEditId(null); setForm({ ...blank }); }} className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <button onClick={() => { setOpen(true); setEditId(null); setForm({ ...blank }); }}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
             + Registrar Sono
           </button>
         }
@@ -103,7 +97,6 @@ export default function SonoPage() {
         </Card>
       )}
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -146,14 +139,18 @@ export default function SonoPage() {
               </div>
               <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => { setOpen(false); setEditId(null); }} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">Salvar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-lg font-medium">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {registros.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-16 text-gray-400">Carregando...</div>
+      ) : registros.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-5xl mb-3">🌙</p>
           <p>Nenhum registro de sono ainda.</p>
