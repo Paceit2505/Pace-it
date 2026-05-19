@@ -1,0 +1,16 @@
+{
+  "name": "pace-it-b2b",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "build:backend": "npm run build --workspace=apps/backend",
+    "db:generate": "npm run db:generate --workspace=apps/backend",
+    "db:migrate": "npm run db:migrate --workspace=apps/backend",
+    "db:seed": "npm run db:seed --workspace=apps/backend"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}
