@@ -45,6 +45,16 @@ export async function productRoutes(fastify: FastifyInstance) {
     return reply.send({ data: result })
   })
 
+  // Categorias ativas — deve vir ANTES de /:id para evitar conflito de rota dinâmica
+  fastify.get('/categories', async (request, reply) => {
+    const categories = await prisma.product.findMany({
+      where: { active: true },
+      select: { category: true },
+      distinct: ['category'],
+    })
+    return reply.send({ data: categories.map((c) => c.category) })
+  })
+
   // Detalhe de produto
   fastify.get('/:id', async (request, reply) => {
     const { id: userId } = request.user as { id: string }
@@ -69,15 +79,5 @@ export async function productRoutes(fastify: FastifyInstance) {
     return reply.send({
       data: { ...product, price: product.priceTables[0]?.price ?? null, priceTables: undefined },
     })
-  })
-
-  // Categorias ativas
-  fastify.get('/categories', async (request, reply) => {
-    const categories = await prisma.product.findMany({
-      where: { active: true },
-      select: { category: true },
-      distinct: ['category'],
-    })
-    return reply.send({ data: categories.map((c) => c.category) })
   })
 }

@@ -29,11 +29,25 @@ export default function LoginScreen() {
       router.replace('/(tabs)')
     },
     onError: (error: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Erro ao entrar',
-        text2: error.response?.data?.message ?? 'Verifique suas credenciais',
-      })
+      if (error.response?.status === 403) {
+        Toast.show({
+          type: 'error',
+          text1: 'Acesso negado',
+          text2: error.response.data?.message ?? 'Conta pendente ou bloqueada',
+        })
+      } else if (!error.response) {
+        Toast.show({
+          type: 'error',
+          text1: 'Sem conexão',
+          text2: 'Verifique sua internet e tente novamente',
+        })
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Erro ao entrar',
+          text2: error.response?.data?.message ?? 'Verifique suas credenciais',
+        })
+      }
     },
   })
 
@@ -74,7 +88,17 @@ export default function LoginScreen() {
 
       <TouchableOpacity
         className="bg-accent rounded-xl py-4 items-center"
-        onPress={() => loginMutation.mutate()}
+        onPress={() => {
+          if (!cnpj || cnpj.replace(/\D/g, '').length !== 14) {
+            Toast.show({ type: 'error', text1: 'Digite um CNPJ válido' })
+            return
+          }
+          if (!password) {
+            Toast.show({ type: 'error', text1: 'Digite sua senha' })
+            return
+          }
+          loginMutation.mutate()
+        }}
         disabled={loginMutation.isPending}
       >
         {loginMutation.isPending ? (

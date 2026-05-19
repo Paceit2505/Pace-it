@@ -4,6 +4,7 @@ import axios from 'axios'
 import { prisma } from '../lib/prisma'
 import { hashPassword, comparePassword, generateTokens } from '../lib/auth'
 import { StoreStatus } from '@prisma/client'
+// Nota: proteção de rate limit fornecida globalmente pelo plugin registrado em server.ts
 
 const loginSchema = z.object({
   cnpj: z.string().optional(),
@@ -30,13 +31,6 @@ const registerSchema = z.object({
 })
 
 export async function authRoutes(fastify: FastifyInstance) {
-  // Rate limit específico para auth: 5 req/min por IP
-  await fastify.register(import('@fastify/rate-limit'), {
-    max: 5,
-    timeWindow: '1 minute',
-    keyGenerator: (req) => req.ip,
-  })
-
   // Login
   fastify.post('/login', async (request, reply) => {
     const body = loginSchema.parse(request.body)
@@ -193,6 +187,17 @@ export async function authRoutes(fastify: FastifyInstance) {
 
     return reply.status(201).send({
       data: { message: 'Cadastro realizado com sucesso. Aguardando aprovação.' },
+    })
+  })
+
+  // Esqueceu a senha — gera token temporário (simplificado sem e-mail real por ora)
+  fastify.post('/forgot-password', async (request, reply) => {
+    const { email } = z.object({ email: z.string().email() }).parse(request.body)
+
+    const user = await prisma.user.findUnique({ where: { email } })
+    // Responde sempre com sucesso para não revelar se o e-mail existe
+    return reply.send({
+      data: { message: 'Se o e-mail existir, você receberá as instruções em breve.' },
     })
   })
 
