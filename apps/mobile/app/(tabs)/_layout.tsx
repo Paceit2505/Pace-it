@@ -1,13 +1,23 @@
 import { Tabs } from 'expo-router'
 import { View, Text } from 'react-native'
+import { useCartStore } from '@/store/cart.store'
 
-function TabIcon({ focused, emoji, label }: { focused: boolean; emoji: string; label: string }) {
+function TabIcon({ focused, emoji, label, badge }: {
+  focused: boolean; emoji: string; label: string; badge?: number
+}) {
   return (
     <View className="items-center">
-      <Text style={{ fontSize: 22 }}>{emoji}</Text>
-      <Text
-        className={`text-xs font-dm-sans mt-1 ${focused ? 'text-accent' : 'text-muted'}`}
-      >
+      <View>
+        <Text style={{ fontSize: 22 }}>{emoji}</Text>
+        {badge != null && badge > 0 && (
+          <View className="absolute -top-1 -right-2 bg-accent rounded-full w-4 h-4 items-center justify-center">
+            <Text className="text-background font-barlow-bold" style={{ fontSize: 9 }}>
+              {badge > 9 ? '9+' : badge}
+            </Text>
+          </View>
+        )}
+      </View>
+      <Text className={`text-xs font-dm-sans mt-1 ${focused ? 'text-accent' : 'text-muted'}`}>
         {label}
       </Text>
     </View>
@@ -15,6 +25,8 @@ function TabIcon({ focused, emoji, label }: { focused: boolean; emoji: string; l
 }
 
 export default function TabsLayout() {
+  const cartCount = useCartStore((s) => s.itemCount())
+
   return (
     <Tabs
       screenOptions={{
@@ -48,7 +60,7 @@ export default function TabsLayout() {
         name="cart"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} emoji="🛒" label="Pedido" />
+            <TabIcon focused={focused} emoji="🛒" label="Pedido" badge={cartCount} />
           ),
         }}
       />
