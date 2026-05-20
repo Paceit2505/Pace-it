@@ -56,6 +56,7 @@ model User {
   representative   Representative?
   refreshTokens    RefreshToken[]
   notifications    Notification[]
+  pushTokens       PushToken[]
 }
 
 model RefreshToken {
@@ -212,4 +213,15 @@ model AuditLog {
   details   Json?
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_tokens")
 }

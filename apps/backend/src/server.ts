@@ -67,6 +67,8 @@ async function start() {
   await server.register(adminRoutes, { prefix: '/admin' })
   await server.register(repRoutes, { prefix: '/rep' })
   await server.register(blingWebhookRoutes)
+  await server.register(pagbrasilWebhookRoutes)
+  await server.register(pushRoutes)
 
   // Health check
   server.get('/health', async () => ({
