@@ -10,6 +10,8 @@ import { orderRoutes } from './routes/orders'
 import { notificationRoutes } from './routes/notifications'
 import { adminRoutes } from './routes/admin'
 import { repRoutes } from './routes/representative'
+import { blingWebhookRoutes } from './routes/webhooks/bling'
+import { startBlingSyncJob } from './jobs/blingSync'
 
 const server = Fastify({ logger: true })
 
@@ -44,6 +46,16 @@ async function start() {
     }
   })
 
+  // Necessário para validar assinatura HMAC dos webhooks
+  server.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    ;(req as any).rawBody = body
+    try {
+      done(null, JSON.parse(body as string))
+    } catch (err: any) {
+      done(err, undefined)
+    }
+  })
+
   // Rotas
   await server.register(authRoutes, { prefix: '/auth' })
   await server.register(storeRoutes, { prefix: '/stores' })
@@ -52,6 +64,7 @@ async function start() {
   await server.register(notificationRoutes, { prefix: '/notifications' })
   await server.register(adminRoutes, { prefix: '/admin' })
   await server.register(repRoutes, { prefix: '/rep' })
+  await server.register(blingWebhookRoutes)
 
   // Health check
   server.get('/health', async () => ({
@@ -64,6 +77,7 @@ async function start() {
 
   await server.listen({ port, host })
   console.log(`🚀 Pace It B2B Backend rodando em http://${host}:${port}`)
+  startBlingSyncJob()
 }
 
 start().catch((err) => {

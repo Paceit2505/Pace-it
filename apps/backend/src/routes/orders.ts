@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { PaymentMethod, OrderStatus } from '@prisma/client'
+import { createBlingOrder } from '../lib/bling'
 
 const FREIGHT_FREE_ABOVE = Number(process.env.FREIGHT_MIN_VALUE_FREE ?? 500)
 const FREIGHT_FIXED = Number(process.env.FREIGHT_FIXED_VALUE ?? 25)
@@ -74,6 +75,39 @@ export async function orderRoutes(fastify: FastifyInstance) {
     await prisma.auditLog.create({
       data: { orderId: order.id, action: 'ORDER_CREATED', details: { userId, total } },
     })
+
+    // Envia pedido para o Bling ERP em background (não bloqueia a resposta)
+    if (process.env.BLING_CLIENT_ID && process.env.BLING_CLIENT_SECRET) {
+      const storeData = await prisma.store.findUnique({ where: { id: store.id } })
+      createBlingOrder({
+        orderId: order.id,
+        storeId: store.id,
+        cnpj: storeData?.cnpj ?? '',
+        razaoSocial: storeData?.razaoSocial ?? '',
+        items: order.items.map((i) => ({
+          productId: i.productId,
+          sku: i.product.sku,
+          name: i.product.name,
+          qty: i.qty,
+          unitPrice: i.unitPrice,
+        })),
+        total: order.total,
+        paymentMethod: order.paymentMethod,
+        notes: order.notes ?? undefined,
+      })
+        .then(async (blingOrderId) => {
+          if (blingOrderId) {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { blingOrderId },
+            })
+            console.log(`[Bling] Pedido ${order.id} criado no Bling: ${blingOrderId}`)
+          }
+        })
+        .catch((err) => {
+          console.error(`[Bling] Erro ao criar pedido ${order.id} no Bling:`, err.message)
+        })
+    }
 
     return reply.status(201).send({ data: order })
   })

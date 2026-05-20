@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { requireRole } from '../lib/auth'
 import { StoreStatus } from '@prisma/client'
+import { syncBlingProducts, syncBlingStock } from '../lib/bling'
 
 export async function adminRoutes(fastify: FastifyInstance) {
   fastify.addHook('onRequest', (fastify as any).authenticate)
@@ -61,9 +62,23 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({ data: priceTable })
   })
 
-  // Trigger sync Bling (placeholder para Fase 2)
+  // Trigger sync Bling
   fastify.post('/sync/bling', async (request, reply) => {
-    return reply.send({ data: { message: 'Sync Bling iniciado (disponível na Fase 2)' } })
+    const { type } = z.object({
+      type: z.enum(['products', 'stock', 'all']).optional().default('all'),
+    }).parse(request.body ?? {})
+
+    const results: Record<string, unknown> = {}
+
+    if (type === 'products' || type === 'all') {
+      results.products = await syncBlingProducts()
+    }
+
+    if (type === 'stock' || type === 'all') {
+      results.stock = await syncBlingStock()
+    }
+
+    return reply.send({ data: results })
   })
 
   // Listar todos os pedidos
