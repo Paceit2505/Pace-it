@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { PaymentMethod, OrderStatus } from '@prisma/client'
 import { createBlingOrder } from '../lib/bling'
+import { createBoleto, createPix } from '../lib/pagbrasil'
 
 const FREIGHT_FREE_ABOVE = Number(process.env.FREIGHT_MIN_VALUE_FREE ?? 500)
 const FREIGHT_FIXED = Number(process.env.FREIGHT_FIXED_VALUE ?? 25)
@@ -109,6 +110,50 @@ export async function orderRoutes(fastify: FastifyInstance) {
         })
     }
 
+    // Gera cobrança no PagBrasil em background
+    if (process.env.PAGBRASIL_API_KEY) {
+      const storeWithAddress = await prisma.store.findUnique({ where: { id: store.id } })
+      const address = storeWithAddress?.address as any
+
+      const payer = {
+        cnpj: storeWithAddress?.cnpj ?? '',
+        name: storeWithAddress?.razaoSocial ?? '',
+        email: storeWithAddress?.email ?? '',
+        phone: storeWithAddress?.phone ?? '',
+        address: {
+          street: address?.street ?? '',
+          number: address?.number ?? '',
+          complement: address?.complement,
+          neighborhood: address?.neighborhood ?? '',
+          city: address?.city ?? '',
+          state: address?.state ?? '',
+          zipCode: address?.zipCode ?? '',
+        },
+      }
+
+      const paymentPromise =
+        order.paymentMethod === 'PIX'
+          ? createPix(order.id, order.total, payer)
+          : createBoleto(
+              order.id,
+              order.total,
+              new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // vence em 3 dias
+              payer
+            )
+
+      paymentPromise
+        .then(async (result) => {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { pagbrasilId: result.pagbrasilId },
+          })
+          console.log(`[PagBrasil] Cobrança gerada para pedido ${order.id}: ${result.pagbrasilId}`)
+        })
+        .catch((err) => {
+          console.error(`[PagBrasil] Erro ao gerar cobrança para pedido ${order.id}:`, err.message)
+        })
+    }
+
     return reply.status(201).send({ data: order })
   })
 
@@ -132,6 +177,54 @@ export async function orderRoutes(fastify: FastifyInstance) {
     })
 
     return reply.send({ data: orders })
+  })
+
+  // Dados do boleto
+  fastify.get('/:id/boleto', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = z.object({ id: z.string() }).parse(request.params)
+
+    const store = await prisma.store.findUnique({ where: { userId } })
+    if (!store) return reply.status(404).send({ error: 'NotFound', message: 'Loja não encontrada', statusCode: 404 })
+
+    const order = await prisma.order.findFirst({ where: { id, storeId: store.id } })
+    if (!order) return reply.status(404).send({ error: 'NotFound', message: 'Pedido não encontrado', statusCode: 404 })
+
+    if (!order.pagbrasilId) {
+      return reply.status(404).send({ error: 'NotFound', message: 'Boleto não disponível ainda', statusCode: 404 })
+    }
+
+    return reply.send({
+      data: {
+        pagbrasilId: order.pagbrasilId,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        dueDate: order.dueDate,
+      },
+    })
+  })
+
+  // Dados da NF-e
+  fastify.get('/:id/nfe', async (request, reply) => {
+    const { id: userId } = request.user as { id: string }
+    const { id } = z.object({ id: z.string() }).parse(request.params)
+
+    const store = await prisma.store.findUnique({ where: { userId } })
+    if (!store) return reply.status(404).send({ error: 'NotFound', message: 'Loja não encontrada', statusCode: 404 })
+
+    const order = await prisma.order.findFirst({ where: { id, storeId: store.id } })
+    if (!order) return reply.status(404).send({ error: 'NotFound', message: 'Pedido não encontrado', statusCode: 404 })
+
+    if (!order.nfeKey) {
+      return reply.status(404).send({ error: 'NotFound', message: 'NF-e não disponível ainda', statusCode: 404 })
+    }
+
+    return reply.send({
+      data: {
+        nfeKey: order.nfeKey,
+        nfeUrl: `https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=completa&chave=${order.nfeKey}`,
+      },
+    })
   })
 
   // Detalhe de pedido

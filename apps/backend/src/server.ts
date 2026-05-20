@@ -11,6 +11,8 @@ import { notificationRoutes } from './routes/notifications'
 import { adminRoutes } from './routes/admin'
 import { repRoutes } from './routes/representative'
 import { blingWebhookRoutes } from './routes/webhooks/bling'
+import { pagbrasilWebhookRoutes } from './routes/webhooks/pagbrasil'
+import { pushRoutes } from './routes/push'
 import { startBlingSyncJob } from './jobs/blingSync'
 
 const server = Fastify({ logger: true })

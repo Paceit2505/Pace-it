@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { validateBlingWebhook } from '../../lib/bling'
 import { prisma } from '../../lib/prisma'
 import { OrderStatus } from '@prisma/client'
+import { notifyOrderConfirmed, notifyNfeIssued } from '../../lib/notifications'
 
 interface BlingWebhookEvent {
   evento: string
@@ -53,6 +54,16 @@ export async function blingWebhookRoutes(fastify: FastifyInstance) {
             details: { blingOrderId },
           },
         })
+        // Notifica o lojista
+        {
+          const storeData = await prisma.order.findUnique({
+            where: { id: order.id },
+            select: { store: { select: { userId: true } } },
+          })
+          if (storeData?.store.userId) {
+            await notifyOrderConfirmed(storeData.store.userId, order.id)
+          }
+        }
         break
 
       case 'nfe.emitida':
@@ -71,6 +82,14 @@ export async function blingWebhookRoutes(fastify: FastifyInstance) {
               details: { nfeKey: event.dados.chaveAcesso },
             },
           })
+          // Notifica o lojista
+          const storeData = await prisma.order.findUnique({
+            where: { id: order.id },
+            select: { store: { select: { userId: true } } },
+          })
+          if (storeData?.store.userId) {
+            await notifyNfeIssued(storeData.store.userId, order.id)
+          }
         }
         break
 
