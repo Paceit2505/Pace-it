@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --background: #0A0A0A;
+  --surface: #141414;
+  --border: #2A2A2A;
+  --accent: #C8FF00;
+  --alert: #FF4D00;
+  --success: #22C55E;
+  --muted: #888888;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -1,0 +1,227 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StoreStatus {
+  ACTIVE
+  PENDING
+  BLOCKED
+}
+
+enum OrderStatus {
+  DRAFT
+  SUBMITTED
+  CONFIRMED
+  INVOICED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BOLETO
+  PIX
+  CREDIT_CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  EXPIRED
+}
+
+enum UserRole {
+  lojista
+  representante
+  admin
+}
+
+model User {
+  id               String          @id @default(cuid())
+  email            String          @unique
+  password         String
+  role             UserRole        @default(lojista)
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  store            Store?
+  representative   Representative?
+  refreshTokens    RefreshToken[]
+  notifications    Notification[]
+  pushTokens       PushToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Store {
+  id               String         @id @default(cuid())
+  cnpj             String         @unique
+  razaoSocial      String
+  nomeFantasia     String
+  email            String
+  phone            String
+  address          Json
+  priceTableId     String
+  representativeId String?
+  status           StoreStatus    @default(PENDING)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  userId           String         @unique
+  user             User           @relation(fields: [userId], references: [id])
+  priceTable       PriceTable     @relation(fields: [priceTableId], references: [id])
+  representative   Representative? @relation(fields: [representativeId], references: [id])
+  orders           Order[]
+  favorites        Favorite[]
+}
+
+model Product {
+  id          String         @id @default(cuid())
+  sku         String         @unique
+  name        String
+  description String?
+  category    String
+  images      String[]
+  unit        String
+  unitQty     Int
+  minOrder    Int            @default(1)
+  weight      Float
+  active      Boolean        @default(true)
+  blingId     String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  priceTables ProductPrice[]
+  stock       Stock?
+  orderItems  OrderItem[]
+  favorites   Favorite[]
+}
+
+model PriceTable {
+  id       String         @id @default(cuid())
+  name     String
+  discount Float          @default(0)
+  active   Boolean        @default(true)
+  createdAt DateTime      @default(now())
+  prices   ProductPrice[]
+  stores   Store[]
+}
+
+model ProductPrice {
+  id           String     @id @default(cuid())
+  productId    String
+  priceTableId String
+  price        Float
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceTable   PriceTable @relation(fields: [priceTableId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, priceTableId])
+}
+
+model Order {
+  id               String        @id @default(cuid())
+  storeId          String
+  representativeId String?
+  status           OrderStatus   @default(DRAFT)
+  items            OrderItem[]
+  subtotal         Float
+  freight          Float         @default(0)
+  discount         Float         @default(0)
+  total            Float
+  paymentMethod    PaymentMethod
+  paymentStatus    PaymentStatus @default(PENDING)
+  dueDate          DateTime?
+  blingOrderId     String?
+  nfeKey           String?
+  pagbrasilId      String?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  store            Store         @relation(fields: [storeId], references: [id])
+  auditLogs        AuditLog[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  qty       Int
+  unitPrice Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Representative {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  stores    Store[]
+}
+
+model Stock {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  qty       Int      @default(0)
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  storeId   String
+  productId String
+  createdAt DateTime @default(now())
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orderId   String
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   // 'ios' | 'android' | 'web'
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_tokens")
+}
