@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 
 async function getAdminStats() {
   // Em produção, busca da API backend
@@ -69,30 +70,30 @@ export default async function AdminPage() {
 
       {/* Ações rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a
+        <Link
           href="/admin/lojas?filter=pending"
           className="bg-surface border border-accent/30 rounded-2xl p-6 hover:border-accent transition-colors"
         >
           <p className="text-accent text-2xl font-bold mb-1">{stats.pendingStores}</p>
           <p className="text-white font-medium">Lojas pendentes</p>
           <p className="text-muted text-sm mt-1">Aguardando aprovação →</p>
-        </a>
-        <a
+        </Link>
+        <Link
           href="/admin/pedidos"
           className="bg-surface border border-border rounded-2xl p-6 hover:border-white/20 transition-colors"
         >
           <p className="text-white text-2xl font-bold mb-1">{stats.totalOrders}</p>
           <p className="text-white font-medium">Total de pedidos</p>
           <p className="text-muted text-sm mt-1">Ver todos →</p>
-        </a>
-        <a
+        </Link>
+        <Link
           href="/admin/sync"
           className="bg-surface border border-border rounded-2xl p-6 hover:border-white/20 transition-colors"
         >
           <p className="text-white text-2xl font-bold mb-1">🔄</p>
           <p className="text-white font-medium">Sync Bling</p>
           <p className="text-muted text-sm mt-1">Sincronizar produtos e estoque →</p>
-        </a>
+        </Link>
       </div>
     </div>
   )
