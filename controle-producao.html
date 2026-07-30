@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Produção — Pace It</title>
+<style>
+  :root{
+    --azul-escuro:#1E3A5F;
+    --azul-medio:#2E5FA3;
+    --verde:#2ECC71;
+    --vermelho:#E74C3C;
+    --cinza:#F5F7FA;
+    --borda:#e2e8f0;
+    --texto:#334155;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--cinza);
+    color:var(--texto);
+    line-height:1.5;
+  }
+  header{
+    background:var(--azul-escuro);
+    color:#fff;
+    padding:20px 24px;
+  }
+  header h1{font-size:22px;font-weight:700}
+  header p{font-size:13px;opacity:.8;margin-top:2px}
+  .container{max-width:1100px;margin:0 auto;padding:24px}
+
+  /* Abas */
+  .tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+  .tab{
+    padding:10px 20px;border:none;border-radius:8px;cursor:pointer;
+    background:#fff;color:var(--texto);font-size:14px;font-weight:600;
+    border:1px solid var(--borda);transition:.15s;
+  }
+  .tab:hover{border-color:var(--azul-medio)}
+  .tab.active{background:var(--azul-medio);color:#fff;border-color:var(--azul-medio)}
+
+  .painel{display:none;background:#fff;border-radius:12px;border:1px solid var(--borda);overflow:hidden}
+  .painel.active{display:block}
+  .painel-head{padding:18px 24px;border-bottom:1px solid var(--borda);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .painel-head h2{font-size:18px;color:var(--azul-escuro)}
+
+  form{padding:20px 24px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:end;border-bottom:1px solid var(--borda);background:#fbfcfe}
+  .campo{display:flex;flex-direction:column;gap:6px}
+  .campo label{font-size:12px;font-weight:600;color:var(--azul-escuro)}
+  .campo input,.campo select{
+    padding:10px 12px;border:1px solid var(--borda);border-radius:8px;font-size:14px;
+    background:#fff;color:var(--texto);
+  }
+  .campo input:focus,.campo select:focus{outline:none;border-color:var(--azul-medio);box-shadow:0 0 0 3px rgba(46,95,163,.12)}
+
+  .btn{padding:11px 20px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
+  .btn-add{background:var(--verde);color:#fff}
+  .btn-add:hover{filter:brightness(.95)}
+  .btn-exp{background:#fff;color:var(--azul-medio);border:1px solid var(--azul-medio);font-size:13px;padding:8px 14px}
+  .btn-exp:hover{background:var(--azul-medio);color:#fff}
+  .btn-del{background:transparent;color:var(--vermelho);border:none;cursor:pointer;font-size:18px;line-height:1;padding:4px 8px;border-radius:6px}
+  .btn-del:hover{background:#fdecea}
+
+  .tabela-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{background:var(--cinza);color:var(--azul-escuro);text-align:left;padding:12px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+  td{padding:12px 16px;border-top:1px solid var(--borda);white-space:nowrap}
+  tbody tr:hover{background:#fbfcfe}
+  .vazio{padding:32px;text-align:center;color:#94a3b8;font-size:14px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;background:#eef2f7;color:var(--azul-medio);font-size:12px;font-weight:600}
+  .total-linha{font-size:13px;color:#64748b}
+  .total-linha b{color:var(--azul-escuro)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Controle de Produção</h1>
+  <p>Pace It — Envase · Produção · Insumo</p>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" data-tab="envase">📦 Envase</button>
+    <button class="tab" data-tab="producao">🏭 Produção</button>
+    <button class="tab" data-tab="insumo">🧪 Insumo</button>
+  </div>
+
+  <!-- ENVASE -->
+  <section class="painel active" id="envase">
+    <div class="painel-head">
+      <h2>Envase</h2>
+      <button class="btn-exp" onclick="exportar('envase')">⬇ Exportar CSV</button>
+    </div>
+    <form onsubmit="adicionar(event,'envase')">
+      <div class="campo">
+        <label>Quantidade de gel</label>
+        <input type="number" step="any" name="qtdGel" placeholder="Ex: 500" required>
+      </div>
+      <div class="campo">
+        <label>Sabor</label>
+        <input type="text" name="sabor" placeholder="Ex: Uva" required>
+      </div>
+      <div class="campo">
+        <label>Empresa que pediu</label>
+        <input type="text" name="empresa" placeholder="Ex: Distribuidora X" required>
+      </div>
+      <div class="campo">
+        <label>Data</label>
+        <input type="date" name="data" required>
+      </div>
+      <button class="btn btn-add" type="submit">+ Adicionar</button>
+    </form>
+    <div class="tabela-wrap">
+      <table>
+        <thead>
+          <tr><th>Qtd. Gel</th><th>Sabor</th><th>Empresa</th><th>Data</th><th></th></tr>
+        </thead>
+        <tbody id="tbody-envase"></tbody>
+      </table>
+    </div>
+    <div class="painel-head" style="border-top:1px solid var(--borda);border-bottom:none">
+      <span class="total-linha">Registros: <b id="cnt-envase">0</b> · Total de gel: <b id="soma-envase">0</b></span>
+    </div>
+  </section>
+
+  <!-- PRODUÇÃO -->
+  <section class="painel" id="producao">
+    <div class="painel-head">
+      <h2>Produção</h2>
+      <button class="btn-exp" onclick="exportar('producao')">⬇ Exportar CSV</button>
+    </div>
+    <form onsubmit="adicionar(event,'producao')">
+      <div class="campo">
+        <label>Quantidade de gel</label>
+        <input type="number" step="any" name="qtdGel" placeholder="Ex: 500" required>
+      </div>
+      <div class="campo">
+        <label>Quantidade de insumo</label>
+        <input type="number" step="any" name="qtdInsumo" placeholder="Ex: 200" required>
+      </div>
+      <div class="campo">
+        <label>Data de entrega</label>
+        <input type="date" name="dataEntrega" required>
+      </div>
+      <button class="btn btn-add" type="submit">+ Adicionar</button>
+    </form>
+    <div class="tabela-wrap">
+      <table>
+        <thead>
+          <tr><th>Qtd. Gel</th><th>Qtd. Insumo</th><th>Data de Entrega</th><th></th></tr>
+        </thead>
+        <tbody id="tbody-producao"></tbody>
+      </table>
+    </div>
+    <div class="painel-head" style="border-top:1px solid var(--borda);border-bottom:none">
+      <span class="total-linha">Registros: <b id="cnt-producao">0</b> · Total de gel: <b id="soma-producao">0</b></span>
+    </div>
+  </section>
+
+  <!-- INSUMO -->
+  <section class="painel" id="insumo">
+    <div class="painel-head">
+      <h2>Insumo</h2>
+      <button class="btn-exp" onclick="exportar('insumo')">⬇ Exportar CSV</button>
+    </div>
+    <form onsubmit="adicionar(event,'insumo')">
+      <div class="campo">
+        <label>Quantidade de insumo</label>
+        <input type="number" step="any" name="qtdInsumo" placeholder="Ex: 1000" required>
+      </div>
+      <div class="campo">
+        <label>Empresa</label>
+        <input type="text" name="empresa" placeholder="Ex: Fornecedor Y" required>
+      </div>
+      <div class="campo">
+        <label>Data de entrega</label>
+        <input type="date" name="dataEntrega" required>
+      </div>
+      <button class="btn btn-add" type="submit">+ Adicionar</button>
+    </form>
+    <div class="tabela-wrap">
+      <table>
+        <thead>
+          <tr><th>Qtd. Insumo</th><th>Empresa</th><th>Data de Entrega</th><th></th></tr>
+        </thead>
+        <tbody id="tbody-insumo"></tbody>
+      </table>
+    </div>
+    <div class="painel-head" style="border-top:1px solid var(--borda);border-bottom:none">
+      <span class="total-linha">Registros: <b id="cnt-insumo">0</b> · Total de insumo: <b id="soma-insumo">0</b></span>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Estrutura das colunas de cada aba
+  const COLUNAS = {
+    envase:   ['qtdGel','sabor','empresa','data'],
+    producao: ['qtdGel','qtdInsumo','dataEntrega'],
+    insumo:   ['qtdInsumo','empresa','dataEntrega']
+  };
+  // Campo numérico usado para somar no rodapé
+  const CAMPO_SOMA = { envase:'qtdGel', producao:'qtdGel', insumo:'qtdInsumo' };
+
+  const CHAVE = 'paceit_controle_producao';
+  let dados = carregar();
+
+  function carregar(){
+    try{
+      return JSON.parse(localStorage.getItem(CHAVE)) || {envase:[],producao:[],insumo:[]};
+    }catch(e){
+      return {envase:[],producao:[],insumo:[]};
+    }
+  }
+  function salvar(){ localStorage.setItem(CHAVE, JSON.stringify(dados)); }
+
+  // Troca de abas
+  document.querySelectorAll('.tab').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.painel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  function adicionar(e,aba){
+    e.preventDefault();
+    const form = e.target;
+    const registro = {};
+    COLUNAS[aba].forEach(c=> registro[c] = form[c].value.trim());
+    dados[aba].push(registro);
+    salvar();
+    renderizar(aba);
+    form.reset();
+    form[COLUNAS[aba][0]].focus();
+  }
+
+  function remover(aba,idx){
+    if(!confirm('Remover este registro?')) return;
+    dados[aba].splice(idx,1);
+    salvar();
+    renderizar(aba);
+  }
+
+  function formatarData(iso){
+    if(!iso) return '';
+    const [a,m,d] = iso.split('-');
+    return (d&&m&&a) ? `${d}/${m}/${a}` : iso;
+  }
+
+  function celula(aba,coluna,valor){
+    if(coluna==='sabor') return `<span class="badge">${escapar(valor)}</span>`;
+    if(coluna.toLowerCase().includes('data')) return formatarData(valor);
+    return escapar(valor);
+  }
+
+  function escapar(t){
+    return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderizar(aba){
+    const tbody = document.getElementById('tbody-'+aba);
+    const lista = dados[aba];
+    const nCols = COLUNAS[aba].length + 1;
+    if(lista.length===0){
+      tbody.innerHTML = `<tr><td class="vazio" colspan="${nCols}">Nenhum registro ainda. Adicione o primeiro acima.</td></tr>`;
+    }else{
+      tbody.innerHTML = lista.map((reg,i)=>{
+        const cels = COLUNAS[aba].map(c=>`<td>${celula(aba,c,reg[c])}</td>`).join('');
+        return `<tr>${cels}<td><button class="btn-del" title="Remover" onclick="remover('${aba}',${i})">✕</button></td></tr>`;
+      }).join('');
+    }
+    // Rodapé
+    document.getElementById('cnt-'+aba).textContent = lista.length;
+    const campo = CAMPO_SOMA[aba];
+    const soma = lista.reduce((s,r)=> s + (parseFloat(r[campo])||0), 0);
+    document.getElementById('soma-'+aba).textContent = soma.toLocaleString('pt-BR');
+  }
+
+  const TITULOS = {
+    qtdGel:'Qtd. Gel', qtdInsumo:'Qtd. Insumo', sabor:'Sabor',
+    empresa:'Empresa', data:'Data', dataEntrega:'Data de Entrega'
+  };
+
+  function exportar(aba){
+    const lista = dados[aba];
+    if(lista.length===0){ alert('Não há registros para exportar.'); return; }
+    const cols = COLUNAS[aba];
+    const cabecalho = cols.map(c=>TITULOS[c]).join(';');
+    const linhas = lista.map(r=> cols.map(c=>{
+      let v = r[c] ?? '';
+      if(c.toLowerCase().includes('data')) v = formatarData(v);
+      return `"${String(v).replace(/"/g,'""')}"`;
+    }).join(';'));
+    const csv = '﻿' + [cabecalho,...linhas].join('\r\n');
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `controle-${aba}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Render inicial
+  ['envase','producao','insumo'].forEach(renderizar);
+</script>
+</body>
+</html>
