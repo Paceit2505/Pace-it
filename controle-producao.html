@@ -61,9 +61,9 @@
   .btn-exp:hover{background:var(--azul-medio);color:#fff}
   .btn-del{background:transparent;color:var(--vermelho);border:none;cursor:pointer;font-size:18px;line-height:1;padding:4px 8px;border-radius:6px}
   .btn-del:hover{background:#fdecea}
-  .acoes{display:flex;gap:6px;align-items:center}
-  .btn-pdf{background:#fff;color:var(--azul-medio);border:1px solid var(--azul-medio);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:5px 10px}
-  .btn-pdf:hover{background:var(--azul-medio);color:#fff}
+  .head-btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn-pedido{background:var(--azul-medio);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;padding:8px 16px}
+  .btn-pedido:hover{filter:brightness(.95)}
 
   .tabela-wrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:14px}
@@ -93,7 +93,10 @@
   <section class="painel active" id="envase">
     <div class="painel-head">
       <h2>Envase</h2>
-      <button class="btn-exp" onclick="exportar('envase')">⬇ Exportar CSV</button>
+      <div class="head-btns">
+        <button class="btn-exp" onclick="exportar('envase')">⬇ Exportar CSV</button>
+        <button class="btn-pedido" onclick="gerarPedido('envase')">📄 Gerar Pedido (PDF)</button>
+      </div>
     </div>
     <form onsubmit="adicionar(event,'envase')">
       <div class="campo">
@@ -131,7 +134,10 @@
   <section class="painel" id="producao">
     <div class="painel-head">
       <h2>Produção</h2>
-      <button class="btn-exp" onclick="exportar('producao')">⬇ Exportar CSV</button>
+      <div class="head-btns">
+        <button class="btn-exp" onclick="exportar('producao')">⬇ Exportar CSV</button>
+        <button class="btn-pedido" onclick="gerarPedido('producao')">📄 Gerar Pedido (PDF)</button>
+      </div>
     </div>
     <form onsubmit="adicionar(event,'producao')">
       <div class="campo">
@@ -165,7 +171,10 @@
   <section class="painel" id="insumo">
     <div class="painel-head">
       <h2>Insumo</h2>
-      <button class="btn-exp" onclick="exportar('insumo')">⬇ Exportar CSV</button>
+      <div class="head-btns">
+        <button class="btn-exp" onclick="exportar('insumo')">⬇ Exportar CSV</button>
+        <button class="btn-pedido" onclick="gerarPedido('insumo')">📄 Gerar Pedido (PDF)</button>
+      </div>
     </div>
     <form onsubmit="adicionar(event,'insumo')">
       <div class="campo">
@@ -272,10 +281,7 @@
     }else{
       tbody.innerHTML = lista.map((reg,i)=>{
         const cels = COLUNAS[aba].map(c=>`<td>${celula(aba,c,reg[c])}</td>`).join('');
-        return `<tr>${cels}<td class="acoes">`
-          + `<button class="btn-pdf" title="Gerar Pedido em PDF" onclick="gerarPdf('${aba}',${i})">📄 PDF</button>`
-          + `<button class="btn-del" title="Remover" onclick="remover('${aba}',${i})">✕</button>`
-          + `</td></tr>`;
+        return `<tr>${cels}<td><button class="btn-del" title="Remover" onclick="remover('${aba}',${i})">✕</button></td></tr>`;
       }).join('');
     }
     // Rodapé
@@ -313,22 +319,32 @@
   // OBS: layout provisório. Será substituído pelo layout definitivo.
   const NOMES_ABA = { envase:'Envase', producao:'Produção', insumo:'Insumo' };
 
-  function gerarPdf(aba, idx){
-    const reg = dados[aba][idx];
-    if(!reg) return;
+  function gerarPedido(aba){
+    const lista = dados[aba];
+    if(!lista || lista.length===0){ alert('Adicione pelo menos um item antes de gerar o pedido.'); return; }
     const cols = COLUNAS[aba];
 
-    const linhasItens = cols.map(c=>{
-      let v = reg[c] ?? '';
-      if(c.toLowerCase().includes('data')) v = formatarData(v);
-      return `<tr><td class="rot">${TITULOS[c]}</td><td class="val">${escapar(v)}</td></tr>`;
+    // Cabeçalho da tabela + coluna "Item"
+    const thead = '<th>Item</th>' + cols.map(c=>`<th>${TITULOS[c]}</th>`).join('');
+
+    // Uma linha por item da aba
+    const tbody = lista.map((reg,i)=>{
+      const cels = cols.map(c=>{
+        let v = reg[c] ?? '';
+        if(c.toLowerCase().includes('data')) v = formatarData(v);
+        return `<td>${escapar(v)}</td>`;
+      }).join('');
+      return `<tr><td class="idx">${i+1}</td>${cels}</tr>`;
     }).join('');
 
-    const numero = String(idx+1).padStart(4,'0');
+    // Total do campo numérico principal
+    const campoSoma = CAMPO_SOMA[aba];
+    const total = lista.reduce((s,r)=> s + (parseFloat(r[campoSoma])||0), 0).toLocaleString('pt-BR');
+
     const hoje = new Date().toLocaleDateString('pt-BR');
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-      <title>Pedido ${NOMES_ABA[aba]} #${numero}</title>
+      <title>Pedido de ${NOMES_ABA[aba]}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
         body{color:#334155;padding:48px}
@@ -338,17 +354,19 @@
         .sub{font-size:13px;color:#64748b;margin-top:2px}
         .doc{text-align:right}
         .doc h2{font-size:15px;color:#2E5FA3;text-transform:uppercase;letter-spacing:1px}
-        .doc .n{font-size:22px;font-weight:800;color:#1E3A5F}
         .doc .d{font-size:12px;color:#64748b;margin-top:4px}
         .titulo{font-size:14px;font-weight:700;color:#1E3A5F;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
-        table{width:100%;border-collapse:collapse;margin-bottom:32px}
-        td{padding:12px 14px;border:1px solid #e2e8f0;font-size:14px}
-        td.rot{background:#F5F7FA;font-weight:600;color:#1E3A5F;width:40%}
-        td.val{font-size:15px}
+        table{width:100%;border-collapse:collapse;margin-bottom:20px}
+        th{background:#1E3A5F;color:#fff;padding:11px 12px;font-size:12px;text-align:left;text-transform:uppercase;letter-spacing:.3px}
+        td{padding:11px 12px;border:1px solid #e2e8f0;font-size:14px}
+        td.idx{text-align:center;font-weight:700;color:#2E5FA3;width:50px}
+        tbody tr:nth-child(even){background:#F5F7FA}
+        .total{text-align:right;font-size:14px;color:#1E3A5F;margin-bottom:36px}
+        .total b{font-size:16px}
         .assin{display:flex;gap:60px;margin-top:70px}
         .assin div{flex:1;text-align:center;border-top:1px solid #94a3b8;padding-top:8px;font-size:12px;color:#64748b}
         .rodape{position:fixed;bottom:24px;left:48px;right:48px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px}
-        @media print{ body{padding:24px} @page{margin:16mm} }
+        @media print{ body{padding:24px} @page{margin:14mm} thead{display:table-header-group} tr{page-break-inside:avoid} }
       </style></head><body>
       <div class="topo">
         <div>
@@ -357,12 +375,16 @@
         </div>
         <div class="doc">
           <h2>Pedido de ${NOMES_ABA[aba]}</h2>
-          <div class="n">#${numero}</div>
           <div class="d">Emitido em ${hoje}</div>
+          <div class="d">${lista.length} ${lista.length===1?'item':'itens'}</div>
         </div>
       </div>
-      <div class="titulo">Detalhes do Pedido</div>
-      <table>${linhasItens}</table>
+      <div class="titulo">Itens do Pedido</div>
+      <table>
+        <thead><tr>${thead}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+      <div class="total">Total (${TITULOS[campoSoma]}): <b>${total}</b></div>
       <div class="assin">
         <div>Solicitante</div>
         <div>Responsável / Aprovação</div>
